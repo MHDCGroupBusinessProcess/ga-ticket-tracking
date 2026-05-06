@@ -413,10 +413,7 @@ body {
     <div class="header-top">
       <div class="header-title">
         <img src="logo.png" alt="MHDC" class="header-logo">
-        <div class="title-text">
-          <h1>Tracking Tiket Helpdesk MHDC Group</h1>
-          <p>Pilih klinik dan masukan nomor tiket</p>
-        </div>
+        <h1 style="font-size: 18px; font-weight: 500; color: #212121; margin: 0;">Tracking Tiket Helpdesk MHDC Group</h1>
       </div>
     </div>
 
@@ -489,6 +486,7 @@ const SHEETS_CONFIG = {
 const STATUS_STYLE = {
   'On Progress':    { bg: '#B5D4F4', color: '#0C447C' },
   'Closed / Done':  { bg: '#d4f0e6', color: '#1D9E75' },
+  'Selesai':        { bg: '#d4f0e6', color: '#1D9E75' },
   'Open':           { bg: '#FAC775', color: '#633806' },
   'Diverifikasi GA':{ bg: '#CECBF6', color: '#26215C' },
   'Hold':           { bg: '#D3D1C7', color: '#2C2C2A' },
@@ -647,7 +645,7 @@ function updateStats() {
   const tickets = isAdmin ? allTickets : allTickets.filter(t => t.klinik === activeKlinik);
   document.getElementById('totalStat').textContent    = tickets.length;
   document.getElementById('progressStat').textContent = tickets.filter(t => ['On Progress','Open','Diverifikasi GA'].includes(t.status)).length;
-  document.getElementById('doneStat').textContent     = tickets.filter(t => t.status === 'Closed / Done').length;
+  document.getElementById('doneStat').textContent     = tickets.filter(t => t.status === 'Closed / Done' || t.status === 'Selesai').length;
 }
 
 // ---- Render Ticket ----
