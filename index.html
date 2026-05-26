@@ -217,24 +217,26 @@ body {
 
 .refresh-btn:hover { background: #8e7a4e; }
 
+/* ===================== STATS — UPDATED 4 KOLOM ===================== */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
   margin-bottom: 16px;
 }
 
 .stat-card {
   background: #f5f5f5;
   border-radius: 6px;
-  padding: 10px;
+  padding: 10px 6px;
   text-align: center;
 }
 
-.stat-number { font-size: 20px; font-weight: 500; color: #212121; }
+.stat-number { font-size: 18px; font-weight: 500; color: #212121; }
 .stat-number.gold { color: #AE9862; }
 .stat-number.green { color: #1D9E75; }
-.stat-label { font-size: 10px; color: #666; margin-top: 2px; }
+.stat-number.red { color: #c0392b; }
+.stat-label { font-size: 10px; color: #666; margin-top: 2px; line-height: 1.2; }
 
 .search-row {
   display: flex;
@@ -393,7 +395,6 @@ body {
     <label class="form-label">Pilih Klinik</label>
     <select class="form-select" id="klinikSelect">
       <option value="">-- Pilih Klinik --</option>
-      <!-- Klinik akan otomatis terisi dari KLINIK_CONFIG -->
     </select>
 
     <label class="form-label">Masukkan PIN</label>
@@ -425,7 +426,7 @@ body {
       </div>
     </div>
 
-    <!-- Stats Cards -->
+    <!-- Stats Cards — UPDATED: 4 CARD (tambah Cancelled) -->
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-number" id="totalStat">-</div>
@@ -438,6 +439,10 @@ body {
       <div class="stat-card">
         <div class="stat-number green" id="doneStat">-</div>
         <div class="stat-label">Selesai</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number red" id="cancelledStat">-</div>
+        <div class="stat-label">Cancelled</div>
       </div>
     </div>
 
@@ -460,8 +465,6 @@ body {
 // ⚙️ KONFIGURASI — EDIT BAGIAN INI UNTUK TAMBAH/UBAH KLINIK & PIN
 // ================================================================
 const KLINIK_CONFIG = [
-  // FORMAT: { nama: 'Nama Klinik Sesuai Google Sheets', pin: 'PIN' }
-  // Contoh:
   { nama: 'MHDC Bulog', pin: '1234' },
   { nama: 'MHDC Kalibata', pin: '1262' },
   { nama: 'Medikids Green Terrace', pin: '1290' },
@@ -508,10 +511,8 @@ const KLINIK_CONFIG = [
 
 const ADMIN_CONFIG = {
   nama: 'GA / Admin',
-  pin: 'admin123', // ← GANTI PIN ADMIN DI SINI
+  pin: 'admin123',
 };
-// ================================================================
-// SELESAI KONFIGURASI — jangan ubah kode di bawah ini
 // ================================================================
 
 const SHEETS_CONFIG = {
@@ -530,7 +531,6 @@ let allTimelines = [];
 let activeKlinik = null;
 let isAdmin = false;
 
-// ---- Isi dropdown klinik saat halaman load ----
 function initLoginForm() {
   const sel = document.getElementById('klinikSelect');
   KLINIK_CONFIG.forEach(k => {
@@ -539,14 +539,12 @@ function initLoginForm() {
     opt.textContent = k.nama;
     sel.appendChild(opt);
   });
-  // Tambah opsi Admin
   const adminOpt = document.createElement('option');
   adminOpt.value = '__admin__';
   adminOpt.textContent = '👤 GA / Admin';
   sel.appendChild(adminOpt);
 }
 
-// ---- Toggle show/hide PIN ----
 function togglePin() {
   const input = document.getElementById('pinInput');
   const btn = document.getElementById('pinToggle');
@@ -559,7 +557,6 @@ function togglePin() {
   }
 }
 
-// ---- Login ----
 function doLogin() {
   const selectedKlinik = document.getElementById('klinikSelect').value;
   const enteredPin = document.getElementById('pinInput').value.trim();
@@ -579,7 +576,6 @@ function doLogin() {
     return;
   }
 
-  // Cek admin
   if (selectedKlinik === '__admin__') {
     if (enteredPin === ADMIN_CONFIG.pin) {
       isAdmin = true;
@@ -593,7 +589,6 @@ function doLogin() {
     }
   }
 
-  // Cek klinik
   const klinik = KLINIK_CONFIG.find(k => k.nama === selectedKlinik);
   if (klinik && enteredPin === klinik.pin) {
     isAdmin = false;
@@ -626,7 +621,6 @@ function doLogout() {
   document.getElementById('result').innerHTML = '<div class="loading">⏳ Loading data...</div>';
 }
 
-// ---- Enter key on PIN input ----
 document.addEventListener('DOMContentLoaded', () => {
   initLoginForm();
   document.getElementById('pinInput').addEventListener('keydown', e => {
@@ -637,7 +631,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ---- CSV Parser ----
 function parseCSV(csvText) {
   const lines = csvText.trim().split('\n');
   const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
@@ -651,7 +644,6 @@ function parseCSV(csvText) {
   return data;
 }
 
-// ---- Load Data ----
 async function loadData() {
   document.getElementById('errorMsg').innerHTML = '';
   document.getElementById('result').innerHTML = '<div class="loading">⏳ Loading data...</div>';
@@ -672,15 +664,15 @@ async function loadData() {
   }
 }
 
-// ---- Stats ----
+// ---- Stats — UPDATED: tambah cancelled ----
 function updateStats() {
   const tickets = isAdmin ? allTickets : allTickets.filter(t => t.klinik === activeKlinik);
-  document.getElementById('totalStat').textContent    = tickets.length;
-  document.getElementById('progressStat').textContent = tickets.filter(t => ['On Progress','Open','Diverifikasi GA'].includes(t.status)).length;
-  document.getElementById('doneStat').textContent     = tickets.filter(t => t.status === 'Closed / Done' || t.status === 'Selesai').length;
+  document.getElementById('totalStat').textContent     = tickets.length;
+  document.getElementById('progressStat').textContent  = tickets.filter(t => ['On Progress','Open','Diverifikasi GA'].includes(t.status)).length;
+  document.getElementById('doneStat').textContent      = tickets.filter(t => t.status === 'Closed / Done' || t.status === 'Selesai').length;
+  document.getElementById('cancelledStat').textContent = tickets.filter(t => ['Cancelled','Canceled','Dibatalkan'].includes(t.status)).length;
 }
 
-// ---- Render Ticket ----
 function renderTicket(ticket) {
   const st = STATUS_STYLE[ticket.status] || { bg: '#D3D1C7', color: '#444' };
 
@@ -727,7 +719,6 @@ function renderTicket(ticket) {
     </div>`;
 }
 
-// ---- Apply Filters ----
 function applyFilters() {
   const q = document.getElementById('searchInput').value.toLowerCase().trim();
   let filtered = isAdmin ? allTickets : allTickets.filter(t => t.klinik === activeKlinik);
