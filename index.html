@@ -366,15 +366,30 @@ body {
 .tl-wait .tl-label { color: #999; }
 .tl-wait .tl-line { opacity: 0.4; }
 
+/* ===================== NOTE BOX — UPDATED: support catatan panjang ===================== */
 .note-box {
   background: #f5f5f5;
+  border-left: 3px solid #AE9862;
   border-radius: 6px;
   padding: 10px 12px;
   margin-top: 12px;
 }
 
-.note-label { font-size: 11px; color: #666; margin-bottom: 3px; }
-.note-text { font-size: 13px; color: #212121; }
+.note-label {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.note-text {
+  font-size: 13px;
+  color: #212121;
+  line-height: 1.5;
+  white-space: pre-wrap;       /* preserve newline & spasi */
+  word-wrap: break-word;        /* wrap kata panjang */
+  overflow-wrap: break-word;
+}
 
 .empty { text-align: center; padding: 32px 16px; color: #666; font-size: 13px; }
 .loading { text-align: center; padding: 32px 16px; color: #666; font-size: 13px; }
@@ -426,7 +441,7 @@ body {
       </div>
     </div>
 
-    <!-- Stats Cards — UPDATED: 4 CARD (tambah Cancelled) -->
+    <!-- Stats Cards — 4 CARD -->
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-number" id="totalStat">-</div>
@@ -631,27 +646,92 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+// ================================================================
+// ✅ FIX 1: CSV PARSER ROBUST — handle koma, newline, & quote di dalam cell
+// (Parser lama pakai split(',') → catatan dengan koma/Enter jadi terpotong)
+// ================================================================
 function parseCSV(csvText) {
-  const lines = csvText.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+  const rows = [];
+  let currentRow = [];
+  let currentField = '';
+  let inQuotes = false;
+  let i = 0;
+
+  while (i < csvText.length) {
+    const char = csvText[i];
+    const nextChar = csvText[i + 1];
+
+    if (inQuotes) {
+      if (char === '"' && nextChar === '"') {
+        currentField += '"';  // escaped quote ""  → "
+        i += 2;
+      } else if (char === '"') {
+        inQuotes = false;     // end of quoted field
+        i++;
+      } else {
+        currentField += char; // koma/newline di dalam quote = bagian dari field
+        i++;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+        i++;
+      } else if (char === ',') {
+        currentRow.push(currentField);
+        currentField = '';
+        i++;
+      } else if (char === '\r' && nextChar === '\n') {
+        currentRow.push(currentField);
+        rows.push(currentRow);
+        currentRow = [];
+        currentField = '';
+        i += 2;
+      } else if (char === '\n' || char === '\r') {
+        currentRow.push(currentField);
+        rows.push(currentRow);
+        currentRow = [];
+        currentField = '';
+        i++;
+      } else {
+        currentField += char;
+        i++;
+      }
+    }
+  }
+
+  if (currentField !== '' || currentRow.length > 0) {
+    currentRow.push(currentField);
+    rows.push(currentRow);
+  }
+
+  const filteredRows = rows.filter(r => r.some(cell => cell !== ''));
+  if (filteredRows.length === 0) return [];
+
+  const headers = filteredRows[0].map(h => h.trim());
   const data = [];
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+  for (let r = 1; r < filteredRows.length; r++) {
     const row = {};
-    headers.forEach((header, index) => { row[header] = values[index] || ''; });
+    headers.forEach((header, idx) => {
+      row[header] = (filteredRows[r][idx] || '').trim();
+    });
     data.push(row);
   }
   return data;
 }
 
+// ================================================================
+// ✅ FIX 2: CACHE BUSTING — force fresh data dari Google Sheets
+// (CSV Google Sheets sering di-cache browser/CDN → catatan tidak reflect)
+// ================================================================
 async function loadData() {
   document.getElementById('errorMsg').innerHTML = '';
   document.getElementById('result').innerHTML = '<div class="loading">⏳ Loading data...</div>';
 
   try {
+    const cacheBuster = '&_t=' + Date.now();
     const [ticketsRes, timelineRes] = await Promise.all([
-      fetch(SHEETS_CONFIG.tickets),
-      fetch(SHEETS_CONFIG.timeline)
+      fetch(SHEETS_CONFIG.tickets + cacheBuster, { cache: 'no-store' }),
+      fetch(SHEETS_CONFIG.timeline + cacheBuster, { cache: 'no-store' })
     ]);
     allTickets  = parseCSV(await ticketsRes.text());
     allTimelines = parseCSV(await timelineRes.text());
@@ -664,13 +744,21 @@ async function loadData() {
   }
 }
 
-// ---- Stats — UPDATED: tambah cancelled ----
 function updateStats() {
   const tickets = isAdmin ? allTickets : allTickets.filter(t => t.klinik === activeKlinik);
   document.getElementById('totalStat').textContent     = tickets.length;
   document.getElementById('progressStat').textContent  = tickets.filter(t => ['On Progress','Open','Diverifikasi GA'].includes(t.status)).length;
   document.getElementById('doneStat').textContent      = tickets.filter(t => t.status === 'Closed / Done' || t.status === 'Selesai').length;
   document.getElementById('cancelledStat').textContent = tickets.filter(t => ['Cancelled','Canceled','Dibatalkan'].includes(t.status)).length;
+}
+
+// ================================================================
+// ✅ FIX 3: Helper escape HTML — supaya karakter spesial di catatan aman
+// ================================================================
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  const map = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' };
+  return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
 function renderTicket(ticket) {
@@ -688,33 +776,33 @@ function renderTicket(ticket) {
         <div class="tl-item ${cls}">
           <div class="tl-dot">${icon}</div>
           <div class="tl-line"></div>
-          <div class="tl-label">${s.label}</div>
-          ${s.sub_label ? `<div class="tl-sub">${s.sub_label}</div>` : ''}
-          ${s.waktu     ? `<div class="tl-time">${s.waktu}</div>`    : ''}
+          <div class="tl-label">${escapeHtml(s.label)}</div>
+          ${s.sub_label ? `<div class="tl-sub">${escapeHtml(s.sub_label)}</div>` : ''}
+          ${s.waktu     ? `<div class="tl-time">${escapeHtml(s.waktu)}</div>`    : ''}
         </div>`;
     }).join('');
 
   const metaLine = isAdmin
-    ? `${ticket.klinik} &nbsp;·&nbsp; PIC: ${ticket.pic}`
-    : `PIC: ${ticket.pic}`;
+    ? `${escapeHtml(ticket.klinik)} &nbsp;·&nbsp; PIC: ${escapeHtml(ticket.pic)}`
+    : `PIC: ${escapeHtml(ticket.pic)}`;
 
   return `
     <div class="card">
       <div class="ticket-header">
         <div>
-          <div class="ticket-id">${ticket.ticket_id} &nbsp;·&nbsp; ${ticket.tanggal}</div>
-          <div class="ticket-title">${ticket.sub_kategori}</div>
-          <div class="kategori-badge">${ticket.kategori}</div>
+          <div class="ticket-id">${escapeHtml(ticket.ticket_id)} &nbsp;·&nbsp; ${escapeHtml(ticket.tanggal)}</div>
+          <div class="ticket-title">${escapeHtml(ticket.sub_kategori)}</div>
+          <div class="kategori-badge">${escapeHtml(ticket.kategori)}</div>
           <div class="ticket-meta">${metaLine}</div>
         </div>
-        <div class="status-badge" style="background:${st.bg};color:${st.color}">${ticket.status}</div>
+        <div class="status-badge" style="background:${st.bg};color:${st.color}">${escapeHtml(ticket.status)}</div>
       </div>
       <div class="divider"></div>
       <div class="timeline">${steps}</div>
       ${ticket.catatan ? `
         <div class="note-box">
-          <div class="note-label">Catatan dari GA</div>
-          <div class="note-text">${ticket.catatan}</div>
+          <div class="note-label">📝 Catatan dari GA</div>
+          <div class="note-text">${escapeHtml(ticket.catatan)}</div>
         </div>` : ''}
     </div>`;
 }
